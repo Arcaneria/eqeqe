@@ -62,7 +62,7 @@ jobs:
             Automated build from main.
 
             - Authentication removed
-            - AutoAnchor: SmartAutoAnchor port (POV-aware anchor cycling, safe glowstone placement, strict/fast server timing)
+            - AutoAnchor: aim-based anchor cycling with fail-safe glowstone placement (one per cycle, max-distance limited), fast spam timing, no POV angle threshold
             - Totem Hand: AutoDoubleHand port (pop/kill double-hand, crystal & sword damage prediction)
             - AutoCrystal: fixed obsidian double-placement when Place Obsidian is enabled
           files: echo_extracted/echo-latest.jar

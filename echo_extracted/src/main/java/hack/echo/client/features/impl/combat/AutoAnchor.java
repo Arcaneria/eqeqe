@@ -38,10 +38,13 @@ import org.lwjgl.glfw.GLFW;
  * places glowstone there opportunistically - this is the fail-safe: if the
  * player moves too fast and the anchor cannot be charged yet, the glowstone is
  * still put down at whatever placeable spot was crossed, so coming back to the
- * anchor charges and detonates with the safe block already in place. There is
- * no angle threshold: the aim state itself decides. Detonation happens when
- * the crosshair is back on the charged anchor, with a totem when available or
- * a configurable fallback hotbar slot.</p>
+ * anchor charges and detonates with the safe block already in place. Only one
+ * glowstone is placed per cycle and only within the configured max distance of
+ * the anchor. There is no angle threshold: the aim state itself decides.
+ * Detonation happens when the crosshair is back on the (charged) anchor, with
+ * a totem when available or a configurable fallback hotbar slot. The charge
+ * and detonation clicks are sent back to back without waiting for client-side
+ * confirmation, so spam runs as fast as the server accepts it.</p>
  *
  * <p>Ported from Stegered's SmartAutoAnchorModule (template.rip) onto Echo's
  * feature/event/setting API, keeping the AutoAnchor name.</p>
@@ -73,7 +76,7 @@ public class AutoAnchor extends Feature {
 
     public final ModeSetting serverTiming = new ModeSetting(
             Concat.of("Server Timing"),
-            SERVER_TIMING_STRICT,
+            SERVER_TIMING_FAST,
             SERVER_TIMING_STRICT, SERVER_TIMING_FAST
     );
     public final IntSetting strictActionGap = new IntSetting(
@@ -91,6 +94,11 @@ public class AutoAnchor extends Feature {
             Concat.of("Safe Place Delays"),
             1f, 2f, 0f, 10f, 1f,
             Concat.of(" ticks")
+    );
+    public final IntSetting safeMaxDistance = new IntSetting(
+            Concat.of("Safe Max Distance"),
+            4, 1, 10,
+            Concat.of(" blocks")
     );
     public final RangeSetting detonationDelays = new RangeSetting(
             Concat.of("Detonation Delays"),
@@ -342,7 +350,8 @@ public class AutoAnchor extends Feature {
      * hands off to the detonation path. Aiming at any other valid spot places
      * glowstone there opportunistically (fail-safe), including before the
      * anchor is charged, so fast movement cannot waste a cycle: the safe block
-     * is already down by the time the player comes back to the anchor.
+     * is already down by the time the player comes back to the anchor. Only
+     * one glowstone is placed per cycle.
      */
     private void tickChargeAnchor() {
         if (!anchorExists()) {
@@ -369,16 +378,26 @@ public class AutoAnchor extends Feature {
                 return;
             }
 
-            // Whether or not the server accepted the click, space retries by
-            // the charge delay instead of spamming every tick.
-            interact(hit);
-            actionCooldown = chargeDelay.getValue();
+            // Send the charge click and immediately move to the detonation
+            // path. The client state is confirmed one tick later anyway; the
+            // charge packet is queued before the detonation packet so the
+            // server processes them in order. If the charge never landed, the
+            // FINISH stage detects the uncharged anchor and re-charges.
+            if (interact(hit)) {
+                transition(Stage.SWITCH_DETONATOR);
+            } else {
+                actionCooldown = chargeDelay.getValue();
+            }
             return;
         }
 
         // Not aiming at the anchor: opportunistic fail-safe / deliberate safe
-        // glowstone placement. Only take the hit if it is a valid spot and
-        // enough glowstone remains to still charge the anchor afterwards.
+        // glowstone placement. Only once per cycle, only on a valid spot
+        // within max distance, and only if enough glowstone remains to still
+        // charge the anchor afterwards.
+        if (safePath) {
+            return;
+        }
         BlockHitResult blockHit = currentBlockHit();
         BlockPos placementPos = validSafePlacement(blockHit);
         if (placementPos == null) {
@@ -399,7 +418,7 @@ public class AutoAnchor extends Feature {
     }
 
     private void tickSwitchDetonator() {
-        if (!isAnchorCharged()) {
+        if (!anchorExists()) {
             cancelCycle();
             return;
         }
@@ -417,7 +436,7 @@ public class AutoAnchor extends Feature {
     }
 
     private void tickWaitAnchorAim() {
-        if (!isAnchorCharged()) {
+        if (!anchorExists()) {
             cancelCycle();
             return;
         }
@@ -448,15 +467,22 @@ public class AutoAnchor extends Feature {
     }
 
     private void tickFinish() {
+        if (!anchorExists()) {
+            // Detonation went through: the anchor is gone. Leave the chosen
+            // detonator selected and do not suppress held RMB, so the next
+            // click can immediately start a new cycle.
+            resetCycle(false, false);
+            return;
+        }
         if (!isAnchorCharged()) {
-            // A successful cycle intentionally leaves the chosen detonator
-            // selected. Keep suppressing held RMB until release so it cannot
-            // interact with an unrelated block immediately after the explosion.
-            resetCycle(false, isUseHeld());
+            // Anchor still there but uncharged: the charge click never landed
+            // server-side. Go back and charge properly instead of leaving a
+            // dud anchor behind.
+            transition(Stage.SWITCH_GLOWSTONE);
             return;
         }
         if (++stageTicks >= 10) {
-            resetCycle(true, isUseHeld());
+            resetCycle(true, false);
         }
     }
 
@@ -489,8 +515,8 @@ public class AutoAnchor extends Feature {
     /**
      * Mirrors the neighbor-block behavior: the player's live crosshair chooses
      * the support block, while the normal vanilla placement context decides the
-     * exact glowstone position. The charged anchor itself is the only forbidden
-     * target; no artificial neighbor-distance restriction is applied.
+     * exact glowstone position. The anchor itself and anything beyond
+     * {@link #safeMaxDistance} blocks from it are rejected.
      */
     private BlockPos validSafePlacement(BlockHitResult hit) {
         if (hit == null
@@ -515,6 +541,14 @@ public class AutoAnchor extends Feature {
                 || !existingState.canBeReplaced()
                 || glowstoneState == null
                 || !canPlaceGlowstone(blockItem, context, placementPos, glowstoneState)) {
+            return null;
+        }
+
+        int maxDistance = safeMaxDistance.getValue();
+        double dx = placementPos.getX() - anchorPos.getX();
+        double dy = placementPos.getY() - anchorPos.getY();
+        double dz = placementPos.getZ() - anchorPos.getZ();
+        if (dx * dx + dy * dy + dz * dz > (double) maxDistance * maxDistance) {
             return null;
         }
 
