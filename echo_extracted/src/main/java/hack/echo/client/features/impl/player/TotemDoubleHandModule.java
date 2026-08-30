@@ -23,6 +23,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Player;
@@ -106,7 +107,10 @@ public class TotemDoubleHandModule extends Feature {
     }
 
     private boolean willDie(Player player, double damage) {
-        HitResult hit = player.raycast(player.position().distanceTo(mc.player.position()), 0f, false);
+        float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        Vec3 start = player.getEyePosition(partialTick);
+        Vec3 end = start.add(player.getLookAngle().scale(player.position().distanceTo(mc.player.position())));
+        HitResult hit = mc.level.clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
         if (hit.getLocation().distanceTo(mc.player.position().add(0, 1, 0)) < 1.5) {
             return mc.player.getHealth() - (damage * predictMultiply.getValue()) <= 0;
         }
@@ -114,7 +118,7 @@ public class TotemDoubleHandModule extends Feature {
     }
 
     private boolean arePlayersAimingAtCrystal(EndCrystal crystal) {
-        float partialTick = mc.getTimer().getGameTimeDeltaPartialTick(false);
+        float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
 
@@ -130,7 +134,7 @@ public class TotemDoubleHandModule extends Feature {
     }
 
     private boolean isPlayerAimingAtMe(Player player) {
-        float partialTick = mc.getTimer().getGameTimeDeltaPartialTick(false);
+        float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         Vec3 start = player.getEyePosition(partialTick);
         Vec3 end = start.add(player.getLookAngle());
         AABB box = new AABB(start, end);
@@ -140,7 +144,7 @@ public class TotemDoubleHandModule extends Feature {
     }
 
     private boolean arePlayersAimingAtBlock(BlockPos blockPos) {
-        float partialTick = mc.getTimer().getGameTimeDeltaPartialTick(false);
+        float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         for (Player player : mc.level.players()) {
             Vec3 start = player.getEyePosition(partialTick);
             Vec3 end = start.add(player.getLookAngle());
@@ -237,7 +241,7 @@ public class TotemDoubleHandModule extends Feature {
         if (!needToDHand && predictSword.getValue()) {
             LivingEntity target = TargetUtils.findClosestResolvedTarget(
                     mc.player.getEyePosition(),
-                    mc.getTimer().getGameTimeDeltaPartialTick(false));
+                    mc.getDeltaTracker().getGameTimeDeltaPartialTick(false));
             if (target instanceof Player player) {
                 double damage = getSwordDamage(player);
                 if (willDie(player, damage)) {
@@ -273,8 +277,8 @@ public class TotemDoubleHandModule extends Feature {
     private double getSwordDamage(Player attacker) {
         double damage = 1;
 
-        if (attacker.getAttackCooldownProgress(0.5f) > 0.7f) {
-            ItemAttributeModifiers mods = attacker.getMainHandItem().getAttributeModifiers();
+        if (attacker.getAttackStrengthScale(0.5f) > 0.7f) {
+            ItemAttributeModifiers mods = attacker.getMainHandItem().getAttributeModifiers(EquipmentSlot.MAINHAND);
             for (ItemAttributeModifiers.Entry entry : mods.modifiers()) {
                 if (Attributes.ATTACK_DAMAGE.equals(entry.attribute())) {
                     damage += entry.modifier().amount();
@@ -285,12 +289,15 @@ public class TotemDoubleHandModule extends Feature {
             }
         }
 
-        int sharpness = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, attacker.getMainHandItem());
-        if (sharpness > 0) {
-            damage += (0.5 * sharpness) + 0.5;
+        var sharpnessHolder = mc.level.registryAccess().get(Enchantments.SHARPNESS);
+        if (sharpnessHolder.isPresent()) {
+            int sharpness = EnchantmentHelper.getItemEnchantmentLevel(sharpnessHolder.get(), attacker.getMainHandItem());
+            if (sharpness > 0) {
+                damage += (0.5 * sharpness) + 0.5;
+            }
         }
 
-        MobEffectInstance strength = attacker.getEffect(MobEffects.DAMAGE_BOOST);
+        MobEffectInstance strength = attacker.getEffect(MobEffects.STRENGTH);
         if (strength != null) {
             damage += 3.0 * (strength.getAmplifier() + 1);
         }

@@ -603,7 +603,7 @@ public class AutoAnchor extends Feature {
         if (placementPos.equals(anchorPos)
                 || !existingState.canBeReplaced()
                 || glowstoneState == null
-                || !blockItem.canPlace(context, glowstoneState)) {
+                || !canPlaceGlowstone(blockItem, context, placementPos, glowstoneState)) {
             return null;
         }
 
@@ -719,6 +719,19 @@ public class AutoAnchor extends Feature {
 
     private int randomRange(RangeSetting setting) {
         return (int) (setting.getMinValue() + Math.random() * (setting.getMaxValue() - setting.getMinValue() + 1));
+    }
+
+    /**
+     * Mirror of BlockItem.canPlace, which became protected in newer versions.
+     */
+    private static boolean canPlaceGlowstone(BlockItem blockItem, BlockPlaceContext context, BlockPos pos, BlockState state) {
+        if (!context.getLevel().isInsideBuildHeight(pos)) return false;
+        if (!blockItem.getBlock().isEnabled(context.getLevel().enabledFeatures())) return false;
+        return state.canSurvive(context.getLevel(), pos);
+    }
+
+    private void cancelCycle() {
+        resetCycle(true, isUseHeld());
     }
 
     private void transition(Stage nextStage) {
