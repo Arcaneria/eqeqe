@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "stegered-client",
+  "name": "Stegered Client",
+  "description": "A private Minecraft utility client based on Achilles.",
+  "version": "${version}",
+  "environment": "client",
+  "mixins": [
+    "template.mixins.json",
+    "template-sodium-extra.mixins.json"
+  ],
+  "accessWidener": "template.accesswidener",
+  "custom": {
+    "fabric-loom:generated": true
+  }
+}
