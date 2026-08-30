@@ -2,11 +2,11 @@ package hack.echo.client.auth;
 
 import hack.echo.client.utils.strings.Concat;
 //? if auth {
-import com.google.gson.Gson;
+/*import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import hack.echo.client.Echo;
-//?}
+*///?}
 
 /**
  * Central hub for all global strings.
@@ -18,7 +18,7 @@ import hack.echo.client.Echo;
 public class CentralFeatureInfoHub {
 
     //? if auth {
-    // Global strings array - populated from backend response
+/*    // Global strings array - populated from backend response
     public static Concat[] globalStrings = new Concat[0];
 
     private static final Gson gson = new Gson();
@@ -96,7 +96,7 @@ public class CentralFeatureInfoHub {
     public static int getStringCount() {
         return globalStrings.length;
     }
-    //?}
+    *///?}
 
     //? if !auth {
     
@@ -113,5 +113,5 @@ public class CentralFeatureInfoHub {
     public static int getStringCount() {
         return 0;
     }
-    *///?}
+    //?}
 }

@@ -1,7 +1,7 @@
 package hack.echo.client.features;
 
 //? if auth
-import hack.echo.client.Echo;
+//import hack.echo.client.Echo;
 import hack.echo.client.Echo;
 import hack.echo.client.utils.Imports;
 import lombok.Getter;
@@ -77,11 +77,11 @@ public class Feature implements Imports {
     public void onEnable() {
         // "+auth-related"
         //? if auth {
-        if (!validateAuth()) {
+/*        if (!validateAuth()) {
             this.enabled = false;
             return;
         }
-        //?}
+        *///?}
         EventManager.register(this);
     }
 
@@ -112,7 +112,7 @@ public class Feature implements Imports {
     }
     
     //? if auth {
-    // Distributed auth validation - checks multiple conditions
+/*    // Distributed auth validation - checks multiple conditions
     private boolean validateAuth() {
         if (Echo.authManager == null) return false;
         int delta = Echo.authManager.getAuthFingerprint() ^ Echo.authManager.getAuthFingerprintTarget();
@@ -125,7 +125,7 @@ public class Feature implements Imports {
             && Echo.authManager.validateUid()
             && !Echo.authManager.isSessionExpired();
     }
-    //?}
+    *///?}
 
     public Boolean hasSettings() {
         return !settings.isEmpty();

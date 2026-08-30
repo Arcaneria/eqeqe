@@ -1,5 +1,5 @@
 //? if auth {
-package hack.echo.client.auth;
+/*package hack.echo.client.auth;
 
 import hack.echo.client.Echo;
 import hack.echo.client.event.EventSubscribe;
@@ -34,4 +34,4 @@ public class AuthHandler extends Handler {
         }
     }
 }
-//?}
+*///?}

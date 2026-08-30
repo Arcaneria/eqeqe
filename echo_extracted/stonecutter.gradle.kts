@@ -13,5 +13,5 @@ stonecutter parameters {
     // let Cyde take care of this, u only need to have debug set to true and then run "reset active project"
     constants["debug"] = false // true
     constants["release"] = false // false
-    constants["auth"] = true // false
+    constants["auth"] = false // false
 }

@@ -87,6 +87,13 @@ public class AutoCrystal extends Feature {
     private int switchCooldown, placeCooldown;
     private boolean placedObsidian, lastRmbPressed;
     private boolean simulateAttackNext = true;
+    /**
+     * Cap on placement attempts for a single obsidian so a placement that never
+     * gets client-side confirmation cannot keep the module clicking forever
+     * (which stacked obsidian when the crosshair drifted to a new face).
+     */
+    private static final int MAX_OBSIDIAN_PLACEMENT_ATTEMPTS = 3;
+    private int placementAttempts;
     @Nullable
     private BlockPos expectedPlacementPos;
 
@@ -112,6 +119,7 @@ public class AutoCrystal extends Feature {
         placedObsidian = false;
         lastRmbPressed = false;
         simulateAttackNext = true;
+        placementAttempts = 0;
         expectedPlacementPos = null;
     }
 
@@ -249,6 +257,7 @@ public class AutoCrystal extends Feature {
         switchCooldown = switchTickDelay.getValue();
         placeCooldown = placeObsidianTickDelay.getValue();
         placedObsidian = false;
+        placementAttempts = 0;
     }
 
     private void handleHitCrystalLogic() {
@@ -294,7 +303,27 @@ public class AutoCrystal extends Feature {
                             expectedPlacementPos = null;
                             continue;
                         }
-                        // still not placed; wait until cooldown expiry then try again
+                        // Not confirmed yet. Never click again if we already burned
+                        // our attempts or the crosshair drifted to a different
+                        // target cell -- clicking there would stack a second
+                        // obsidian while we are still waiting on the first one.
+                        if (placementAttempts >= MAX_OBSIDIAN_PLACEMENT_ATTEMPTS) {
+                            currentStage = HitCrystalStage.SwitchCrystal;
+                            switchCooldown = switchTickDelay.getValue();
+                            placedObsidian = false;
+                            expectedPlacementPos = null;
+                            continue;
+                        }
+                        if (!(mc.hitResult instanceof BlockHitResult blockHit)
+                                || !resolvePlacementPos(blockHit).equals(expectedPlacementPos)) {
+                            currentStage = HitCrystalStage.SwitchCrystal;
+                            switchCooldown = switchTickDelay.getValue();
+                            placedObsidian = false;
+                            expectedPlacementPos = null;
+                            continue;
+                        }
+                        // Still aiming at the same cell: wait out the cooldown,
+                        // then retry that exact placement once more.
                         placeCooldown = placeObsidianTickDelay.getValue();
                         return;
                     }
@@ -310,6 +339,7 @@ public class AutoCrystal extends Feature {
                             InputHandler.simulateClick(mc.options.keyUse, inputSimulation.getValue());
                             placedObsidian = true;
                             expectedPlacementPos = placementPos;
+                            placementAttempts++;
                         } else {
                             // Already has obsidian/bedrock, switch to crystal
                             currentStage = HitCrystalStage.SwitchCrystal;
@@ -347,7 +377,15 @@ public class AutoCrystal extends Feature {
             mc.player.getMainHandItem(),
             blockHit
         );
-        return placeContext.getClickedPos();
+        BlockPos clickedPos = placeContext.getClickedPos();
+        // The obsidian actually lands on the clicked cell when it is replaceable
+        // (air, grass, water...) and on the adjacent cell otherwise. Tracking the
+        // real landing cell is what lets the placement confirmation below work.
+        BlockState clickedState = mc.level.getBlockState(clickedPos);
+        if (clickedState.canBeReplaced()) {
+            return clickedPos;
+        }
+        return clickedPos.relative(blockHit.getDirection());
     }
 
     private boolean canPlaceHeldBlockAt(BlockHitResult blockHit) {

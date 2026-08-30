@@ -31,7 +31,7 @@ public class FeatureManager {
 
     public void initialize() {
         //? if !auth {
-        /*features.add(new TimerCooldownHudModule());
+        features.add(new TimerCooldownHudModule());
         features.add(new WatermarkHudModule());
         features.add(new ArrayListModule());
         features.add(new NotificationsHudModule());
@@ -167,7 +167,7 @@ public class FeatureManager {
         for (Category category : Category.values()) {
             categoryCache.put(category, Collections.unmodifiableList(categoryCache.get(category)));
         }
-        *///?}
+        //?}
     }
 
     private static int compareCharSequenceIgnoreCase(CharSequence a, CharSequence b) {
@@ -225,7 +225,7 @@ public class FeatureManager {
     }
 
     //? if auth {
-    public void addFeatures(CopyOnWriteArrayList<Feature> features) {
+/*    public void addFeatures(CopyOnWriteArrayList<Feature> features) {
         this.features.addAll(features);
         for (Feature feature : features) {
             featureCache.put(feature.getClass(), feature);
@@ -240,5 +240,5 @@ public class FeatureManager {
     public void addCategoryCache(Map<Category, List<Feature>> categoryCache) {
         this.categoryCache.putAll(categoryCache);
     }
-    //?}
+    *///?}
 }

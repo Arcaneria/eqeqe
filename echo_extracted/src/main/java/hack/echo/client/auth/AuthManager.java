@@ -275,7 +275,7 @@ public class AuthManager {
 
                     // Request feature info after successful login
                     //? if auth
-                    sendSecureMessage(webSocket, CentralFeatureInfoHub.createFeaturesRequest(), false);
+//                    sendSecureMessage(webSocket, CentralFeatureInfoHub.createFeaturesRequest(), false);
                 } else {
                     String msg = json.has("message") ? json.get("message").getAsString() : "Unknown error";
                     //? if debug
@@ -319,7 +319,7 @@ public class AuthManager {
                 if (webSocket != null) webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "Kicked");
             } else if ("features_response".equals(type)) {
                 //? if auth
-                CentralFeatureInfoHub.initializeFromResponse(message);
+//                CentralFeatureInfoHub.initializeFromResponse(message);
             }
         } catch (Exception e) {
             //? if debug

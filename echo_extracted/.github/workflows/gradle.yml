@@ -5,12 +5,13 @@ on:
     branches: [ "main", "latest" ]
   pull_request:
     branches: [ "main", "latest" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -26,3 +27,31 @@ jobs:
 
       - name: Build with Gradle Wrapper
         run: ./gradlew build
+
+      - name: Stage release jar
+        run: |
+          find build/libs -name "echo-*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" -exec cp {} echo-latest.jar \;
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: echo-mod
+          path: echo-latest.jar
+
+      - name: Publish release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: b0.0.6
+          name: Echo Client b0.0.6
+          body: |
+            Automated build from main.
+
+            - Authentication removed
+            - AutoAnchor: SmartAutoAnchor port (POV-aware anchor cycling, safe glowstone placement, strict/fast server timing)
+            - Totem Hand: AutoDoubleHand port (pop/kill double-hand, crystal & sword damage prediction)
+            - AutoCrystal: fixed obsidian double-placement when Place Obsidian is enabled
+          files: echo-latest.jar
+          fail_on_unmatched_files: false
+          allowUpdates: true
+          make_latest: true
