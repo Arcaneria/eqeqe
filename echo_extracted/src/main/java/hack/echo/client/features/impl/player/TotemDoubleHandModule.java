@@ -26,9 +26,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -276,13 +274,10 @@ public class TotemDoubleHandModule extends Feature {
         double damage = 1;
 
         if (attacker.getAttackCooldownProgress(0.5f) > 0.7f) {
-            Item item = attacker.getMainHandItem().getItem();
-            if (item instanceof SwordItem) {
-                ItemAttributeModifiers mods = attacker.getMainHandItem().getAttributeModifiers();
-                for (ItemAttributeModifiers.Entry entry : mods.modifiers()) {
-                    if (Attributes.ATTACK_DAMAGE.equals(entry.attribute())) {
-                        damage += entry.modifier().amount();
-                    }
+            ItemAttributeModifiers mods = attacker.getMainHandItem().getAttributeModifiers();
+            for (ItemAttributeModifiers.Entry entry : mods.modifiers()) {
+                if (Attributes.ATTACK_DAMAGE.equals(entry.attribute())) {
+                    damage += entry.modifier().amount();
                 }
             }
             if (canCrit(attacker)) {
