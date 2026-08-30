@@ -1,6 +1,6 @@
 package hack.echo.client.utils.rotation;
 
-import hack.echo.client.auth.MathProt;
+import hack.echo.client.utils.rotation.MathProt;
 import hack.echo.client.event.EventSubscribe;
 import hack.echo.client.features.Feature;
 import hack.echo.client.handlers.RotationHandler;

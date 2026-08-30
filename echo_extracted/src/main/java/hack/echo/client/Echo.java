@@ -1,6 +1,5 @@
 package hack.echo.client;
 
-import hack.echo.client.auth.AuthManager;
 import hack.echo.client.chunk.BlockEspManager;
 import hack.echo.client.command.CommandManager;
 import hack.echo.client.config.FeatureConfig;
@@ -53,7 +52,6 @@ public class Echo implements ModInitializer, SimpleSynchronousResourceReloadList
     public static HandlerManager handlerManager;
     public static BlockEspManager blockEspManager;
     public static CommandManager commandManager;
-    public static AuthManager authManager;
     public static volatile boolean isDestroyed = false;
     public static Draw2D draw2D;
     public static Draw3D draw3d;

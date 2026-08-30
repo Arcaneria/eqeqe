@@ -1,6 +1,6 @@
 package hack.echo.client.handlers;
 
-import hack.echo.client.auth.MathProt;
+import hack.echo.client.utils.rotation.MathProt;
 import hack.echo.client.mixin.entity.MixinEntity;
 import hack.echo.client.mixin.entity.MixinFireworkRocketEntity;
 import hack.echo.client.mixin.entity.MixinItem;

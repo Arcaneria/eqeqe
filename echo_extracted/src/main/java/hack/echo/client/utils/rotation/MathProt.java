@@ -1,6 +1,8 @@
-package hack.echo.client.auth;
+package hack.echo.client.utils.rotation;
 
+//? if auth {
 import hack.echo.client.Echo;
+//?}
 import net.minecraft.util.Mth;
 
 public class MathProt {

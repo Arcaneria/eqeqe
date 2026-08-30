@@ -3,7 +3,7 @@ package hack.echo.client.mixin.entity;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.mojang.authlib.GameProfile;
 import hack.echo.client.Echo;
-import hack.echo.client.auth.MathProt;
+import hack.echo.client.utils.rotation.MathProt;
 import hack.echo.client.event.impl.*;
 import hack.echo.client.handlers.RotationHandler;
 import net.minecraft.client.Minecraft;
