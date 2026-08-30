@@ -58,6 +58,7 @@ public class AutoAnchor extends Feature {
         WAIT_ANCHOR,
         SWITCH_GLOWSTONE,
         CHARGE_ANCHOR,
+        DECIDE,
         SWITCH_DETONATOR,
         WAIT_ANCHOR_AIM,
         FINISH
@@ -99,6 +100,11 @@ public class AutoAnchor extends Feature {
             Concat.of("Safe Max Distance"),
             4, 1, 10,
             Concat.of(" blocks")
+    );
+    public final IntSetting decisionWait = new IntSetting(
+            Concat.of("Decision Wait"),
+            3, 0, 20,
+            Concat.of(" ticks")
     );
     public final RangeSetting detonationDelays = new RangeSetting(
             Concat.of("Detonation Delays"),
@@ -143,6 +149,7 @@ public class AutoAnchor extends Feature {
     private boolean suppressUseUntilRelease;
     private boolean interactionPerformedThisTick;
     private boolean slotChangedThisTick;
+    private int decisionTicks;
 
     @Override
     public void onEnable() {
@@ -161,6 +168,7 @@ public class AutoAnchor extends Feature {
         return switch (stage) {
             case IDLE -> "";
             case CHARGE_ANCHOR -> safePath ? "Safe" : "Charge";
+            case DECIDE -> "Decide";
             case SWITCH_DETONATOR, WAIT_ANCHOR_AIM, FINISH -> safePath ? "Safe" : "Normal";
             default -> "Active";
         };
@@ -168,6 +176,9 @@ public class AutoAnchor extends Feature {
 
     /**
      * Captures the intended anchor position before vanilla consumes the item.
+     * Also handles already-placed anchors: clicking an existing anchor cancels
+     * the vanilla interaction (which would instantly charge/detonate it) and
+     * starts a module cycle on it instead.
      */
     @EventSubscribe
     private void onInteractBlockPre(EventPerformUseItemOn.Pre event) {
@@ -178,8 +189,7 @@ public class AutoAnchor extends Feature {
                 || event.getHand() != InteractionHand.MAIN_HAND
                 || !isUseHeld()
                 || isNull()
-                || hack.echo.client.api.MinecraftCompat.getScreen() != null
-                || !mc.player.getMainHandItem().is(Items.RESPAWN_ANCHOR)) {
+                || hack.echo.client.api.MinecraftCompat.getScreen() != null) {
             return;
         }
 
@@ -191,9 +201,19 @@ public class AutoAnchor extends Feature {
         BlockPos clickedPos = hit.getBlockPos();
         BlockState clickedState = mc.level.getBlockState(clickedPos);
 
-        // Clicking an existing anchor is a detonation/air-place action, not the
-        // start of a new smart cycle.
         if (clickedState.is(Blocks.RESPAWN_ANCHOR)) {
+            // Already-placed anchor: cancel the vanilla interaction and run a
+            // full module cycle on it (charge if needed, decide, detonate).
+            event.cancel();
+            pendingPrimaryCandidate = clickedPos;
+            pendingSecondaryCandidate = null;
+            pendingOriginalSlot = mc.player.getInventory().getSelectedSlot();
+            pendingInitialPlacement = true;
+            beginCycle();
+            return;
+        }
+
+        if (!mc.player.getMainHandItem().is(Items.RESPAWN_ANCHOR)) {
             return;
         }
 
@@ -277,6 +297,7 @@ public class AutoAnchor extends Feature {
             case WAIT_ANCHOR -> tickWaitAnchor();
             case SWITCH_GLOWSTONE -> tickSwitchGlowstone();
             case CHARGE_ANCHOR -> tickChargeAnchor();
+            case DECIDE -> tickDecide();
             case SWITCH_DETONATOR -> tickSwitchDetonator();
             case WAIT_ANCHOR_AIM -> tickWaitAnchorAim();
             case FINISH -> tickFinish();
@@ -287,26 +308,42 @@ public class AutoAnchor extends Feature {
     }
 
     private void beginCycle() {
-        if (getGlowstoneSlot() == -1) {
-            suppressUseUntilRelease = isUseHeld();
-            clearPendingPlacement();
-            return;
-        }
         anchorCandidatePrimary = pendingPrimaryCandidate;
         anchorCandidateSecondary = pendingSecondaryCandidate;
         originalAnchorSlot = pendingOriginalSlot;
         anchorPos = null;
         safePath = false;
+        decisionTicks = 0;
         slotCooldown = randomRange(slotDelays);
         actionCooldown = chargeDelay.getValue();
         ((KeyMappingAccessor) mc.options.keyUse).setClickCount(0);
         clearPendingPlacement();
+
+        // An already-charged anchor needs no glowstone: go through the
+        // decision wait and straight to detonation. Otherwise glowstone is
+        // required to charge.
+        if (anchorAt(anchorCandidatePrimary) && BlockUtils.isRespawnAnchorCharged(anchorCandidatePrimary)) {
+            decisionTicks = decisionWait.getValue();
+            transition(Stage.DECIDE);
+            return;
+        }
+        if (getGlowstoneSlot() == -1) {
+            suppressUseUntilRelease = isUseHeld();
+            clearPendingPlacement();
+            return;
+        }
         transition(Stage.WAIT_ANCHOR);
     }
 
     private void tickWaitAnchor() {
         anchorPos = findPlacedAnchor();
         if (anchorPos != null) {
+            if (isAnchorCharged()) {
+                decisionTicks = decisionWait.getValue();
+                transition(Stage.DECIDE);
+                return;
+            }
+
             int glowstoneSlot = getGlowstoneSlot();
             if (glowstoneSlot == -1) {
                 cancelCycle();
@@ -359,7 +396,8 @@ public class AutoAnchor extends Feature {
             return;
         }
         if (isAnchorCharged()) {
-            transition(Stage.SWITCH_DETONATOR);
+            decisionTicks = decisionWait.getValue();
+            transition(Stage.DECIDE);
             return;
         }
         if (getGlowstoneSlot() == -1) {
@@ -378,13 +416,13 @@ public class AutoAnchor extends Feature {
                 return;
             }
 
-            // Send the charge click and immediately move to the detonation
-            // path. The client state is confirmed one tick later anyway; the
-            // charge packet is queued before the detonation packet so the
-            // server processes them in order. If the charge never landed, the
-            // FINISH stage detects the uncharged anchor and re-charges.
+            // Send the charge click and open the decision window. The charge
+            // packet is sent before any detonation packet, so the server
+            // processes them in order. If the charge never landed, the FINISH
+            // stage detects the uncharged anchor and re-charges.
             if (interact(hit)) {
-                transition(Stage.SWITCH_DETONATOR);
+                decisionTicks = decisionWait.getValue();
+                transition(Stage.DECIDE);
             } else {
                 actionCooldown = chargeDelay.getValue();
             }
@@ -415,6 +453,55 @@ public class AutoAnchor extends Feature {
             safePath = true;
         }
         actionCooldown = randomRange(safePlaceDelays);
+    }
+
+    /**
+     * Post-charge decision window. Waits the configured amount of ticks, then:
+     * crosshair still on the anchor -> normal detonation; crosshair on a valid
+     * glowstone spot -> place one glowstone there, then detonate when the
+     * crosshair returns to the anchor; anywhere else -> normal detonation.
+     */
+    private void tickDecide() {
+        if (!anchorExists()) {
+            cancelCycle();
+            return;
+        }
+        if (isAnchorCharged() && decisionTicks > 0) {
+            decisionTicks--;
+            return;
+        }
+        if (!isAnchorCharged()) {
+            // The charge click hasn't landed yet. Give it a grace period,
+            // then go back and re-charge instead of waiting forever.
+            if (++stageTicks > confirmationTimeout.getValue()) {
+                transition(Stage.CHARGE_ANCHOR);
+            }
+            return;
+        }
+
+        // Decision time.
+        if (currentAnchorHit() != null) {
+            transition(Stage.SWITCH_DETONATOR);
+            return;
+        }
+
+        if (!safePath) {
+            BlockHitResult blockHit = currentBlockHit();
+            BlockPos placementPos = validSafePlacement(blockHit);
+            if (placementPos != null && hotbarGlowstoneCount() >= 2) {
+                if (actionCooldown > 0) {
+                    actionCooldown--;
+                    return;
+                }
+                if (interact(blockHit)) {
+                    safePath = true;
+                }
+                actionCooldown = randomRange(safePlaceDelays);
+                return;
+            }
+        }
+
+        transition(Stage.SWITCH_DETONATOR);
     }
 
     private void tickSwitchDetonator() {
@@ -703,6 +790,7 @@ public class AutoAnchor extends Feature {
 
         stage = Stage.IDLE;
         stageTicks = 0;
+        decisionTicks = 0;
         slotCooldown = 0;
         actionCooldown = 0;
         serverActionCooldown = 0;

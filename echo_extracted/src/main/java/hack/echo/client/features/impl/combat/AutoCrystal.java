@@ -96,6 +96,16 @@ public class AutoCrystal extends Feature {
     private int placementAttempts;
     @Nullable
     private BlockPos expectedPlacementPos;
+    /**
+     * Grace ticks after a crystal place click before the module may click the
+     * same spot again. The crystal entity (and its block-state effect) shows
+     * up a tick later, so clicking again in that window produces ghost
+     * crystals the server rejects.
+     */
+    private static final int PLACE_CONFIRM_GRACE_TICKS = 2;
+    @Nullable
+    private BlockPos pendingPlacePos;
+    private int pendingPlaceTicks;
 
     @Override
     public void onEnable() {
@@ -121,6 +131,8 @@ public class AutoCrystal extends Feature {
         simulateAttackNext = true;
         placementAttempts = 0;
         expectedPlacementPos = null;
+        pendingPlacePos = null;
+        pendingPlaceTicks = 0;
     }
 
     @EventSubscribe
@@ -323,13 +335,32 @@ public class AutoCrystal extends Feature {
                             continue;
                         }
                         // Still aiming at the same cell: wait out the cooldown,
-                        // then retry that exact placement once more.
-                        placeCooldown = placeObsidianTickDelay.getValue();
+                        // then retry that exact placement once more (bounded by
+                        // the attempt cap). The clicked-block guard above
+                        // guarantees a retry can never stack a second obsidian:
+                        // once the cell holds obsidian the ray hits it and the
+                        // stage advances instead of clicking. The cooldown is
+                        // already 0 here (decremented at the top of the loop).
+                        InputHandler.simulateClick(mc.options.keyUse, inputSimulation.getValue());
+                        placementAttempts++;
+                        placeCooldown = Math.max(placeObsidianTickDelay.getValue(), 1);
                         return;
                     }
 
                     // Try to place obsidian
                     if (mc.hitResult instanceof BlockHitResult blockHit) {
+                        // Looking at an existing obsidian/bedrock block means the
+                        // support is already there: never place a second one
+                        // (clicking its face would stack obsidian outward).
+                        Block clickedBlock = mc.level.getBlockState(blockHit.getBlockPos()).getBlock();
+                        if (clickedBlock == Blocks.OBSIDIAN || clickedBlock == Blocks.BEDROCK) {
+                            currentStage = HitCrystalStage.SwitchCrystal;
+                            switchCooldown = switchTickDelay.getValue();
+                            placedObsidian = false;
+                            expectedPlacementPos = null;
+                            continue;
+                        }
+
                         BlockPos placementPos = resolvePlacementPos(blockHit);
                         BlockState placementState = mc.level.getBlockState(placementPos);
                         Block placementBlock = placementState.getBlock();
@@ -484,7 +515,28 @@ public class AutoCrystal extends Feature {
         boolean validBlock = state.is(Blocks.OBSIDIAN) || state.is(Blocks.BEDROCK);
         
         if (!validBlock) return;
-        if (BlockUtils.hasCrystalOnBlock(pos)) return;
+        if (BlockUtils.hasCrystalOnBlock(pos)) {
+            pendingPlacePos = null;
+            pendingPlaceTicks = 0;
+            return;
+        }
+
+        // Confirmation grace: after a place click, the crystal entity spawns a
+        // tick later. Do not click the same spot again inside the grace window
+        // or the server rejects the duplicate (ghost crystals).
+        if (pendingPlacePos != null) {
+            if (pendingPlacePos.equals(pos)) {
+                if (++pendingPlaceTicks < PLACE_CONFIRM_GRACE_TICKS) return;
+                // Grace expired and still no crystal: the placement failed,
+                // allow retrying.
+                pendingPlacePos = null;
+                pendingPlaceTicks = 0;
+            } else {
+                pendingPlacePos = null;
+                pendingPlaceTicks = 0;
+            }
+        }
+
         if (mc.player.getMainHandItem().getItem() != Items.END_CRYSTAL) {
             int crystalSlot = InventoryUtils.findItemWithPredicateInHotbar(itemStack -> itemStack.getItem() == Items.END_CRYSTAL);
             if (crystalSlot != -1) {
@@ -498,6 +550,8 @@ public class AutoCrystal extends Feature {
             if (Math.random() * 100 < failChance.getValue()) return;
             InputHandler.simulateClick(mc.options.keyUse, inputSimulation.getValue());
             placeTimer.reset();
+            pendingPlacePos = pos;
+            pendingPlaceTicks = 0;
         }
     }
 
