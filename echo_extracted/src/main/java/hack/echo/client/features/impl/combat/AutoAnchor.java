@@ -725,7 +725,7 @@ public class AutoAnchor extends Feature {
      * Mirror of BlockItem.canPlace, which became protected in newer versions.
      */
     private static boolean canPlaceGlowstone(BlockItem blockItem, BlockPlaceContext context, BlockPos pos, BlockState state) {
-        if (!context.getLevel().isInsideBuildHeight(pos)) return false;
+        if (!context.getLevel().isInsideBuildHeight(pos.getY())) return false;
         if (!blockItem.getBlock().isEnabled(context.getLevel().enabledFeatures())) return false;
         return state.canSurvive(context.getLevel(), pos);
     }

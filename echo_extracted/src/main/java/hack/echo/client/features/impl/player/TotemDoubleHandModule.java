@@ -23,11 +23,11 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Items;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -278,7 +278,8 @@ public class TotemDoubleHandModule extends Feature {
         double damage = 1;
 
         if (attacker.getAttackStrengthScale(0.5f) > 0.7f) {
-            ItemAttributeModifiers mods = attacker.getMainHandItem().getAttributeModifiers(EquipmentSlot.MAINHAND);
+            ItemAttributeModifiers mods = attacker.getMainHandItem()
+                    .getOrDefault(DataComponents.ATTRIBUTE_MODIFIERS, ItemAttributeModifiers.EMPTY);
             for (ItemAttributeModifiers.Entry entry : mods.modifiers()) {
                 if (Attributes.ATTACK_DAMAGE.equals(entry.attribute())) {
                     damage += entry.modifier().amount();
