@@ -28,15 +28,21 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
 
-      - name: Apply stonecutter constants (auth=false)
-        run: ./gradlew resetActiveProject || ./gradlew stonecutter-reset || true
-
       - name: Build with Gradle Wrapper
         run: ./gradlew build
 
       - name: Stage release jar
         run: |
-          find build/libs -name "echo-*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" -exec cp {} echo-latest.jar \;
+          JAR=$(find versions/1.21.11/build/libs -name "echo-*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" 2>/dev/null | head -1)
+          if [ -z "$JAR" ]; then
+            JAR=$(find versions -path "*/build/libs/echo-*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" 2>/dev/null | head -1)
+          fi
+          if [ -z "$JAR" ]; then
+            echo "No jar found" >&2
+            exit 1
+          fi
+          cp "$JAR" echo-latest.jar
+          ls -la echo-latest.jar
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
