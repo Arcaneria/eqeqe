@@ -1,10 +1,10 @@
 package hack.echo.client.handlers;
 
 //? if auth {
-/*import hack.echo.client.Echo;
+import hack.echo.client.Echo;
 import hack.echo.client.auth.AuthHandler;
 import hack.echo.client.auth.AuthManager;
-*///?}
+//?}
 import hack.echo.client.event.EventManager;
 import hack.echo.client.handlers.impl.*;
 
@@ -16,12 +16,12 @@ public class HandlerManager {
     // "+auth-related"
     public void initialize() {
         //? if auth {
-/*        if (!validateSession()) {
+        if (!validateSession()) {
             return;
         }
         
         handlers.add(new AuthHandler());
-        *///?}
+        //?}
         
         handlers.add(new KeyHandler());
         handlers.add(new HurtTickHandler());
@@ -44,21 +44,21 @@ public class HandlerManager {
     }
     
     //? if auth {
-/*    private boolean validateSession() {
+    private boolean validateSession() {
         if (Echo.authManager == null) return false;
         return Echo.authManager.validateSession()
             && Echo.authManager.validateWebSocket()
             && authFingerprintMatches(Echo.authManager);
     }
-    *///?}
+    //?}
 
     //? if auth {
-/*    private boolean authFingerprintMatches(AuthManager manager) {
+    private boolean authFingerprintMatches(AuthManager manager) {
         int delta = manager.getAuthFingerprint() ^ manager.getAuthFingerprintTarget();
         delta |= delta >> 4;
         delta |= delta >> 2;
         delta |= delta >> 1;
         return (delta & 0x01) == 0;
     }
-    *///?}
+    //?}
 }

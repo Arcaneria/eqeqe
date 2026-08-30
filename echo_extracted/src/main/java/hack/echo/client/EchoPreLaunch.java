@@ -1,18 +1,18 @@
 package hack.echo.client;
 
 //? if auth {
-/*import hack.echo.client.auth.AuthManager;
+import hack.echo.client.auth.AuthManager;
 import hack.echo.client.auth.FileAuth;
 import hack.echo.client.ui.LoginFrame;
-*///?}
+//?}
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 //? if auth {
-/*import javax.swing.*;
+import javax.swing.*;
 import java.util.concurrent.CompletableFuture;
-*///?}
+//?}
 
 // Error seems to happen when pasting
 public class EchoPreLaunch implements PreLaunchEntrypoint {
@@ -22,7 +22,7 @@ public class EchoPreLaunch implements PreLaunchEntrypoint {
     @Override
     public void onPreLaunch() {
         //? if auth {
-/*        try {
+        try {
             if (Echo.authManager == null) {
                 Echo.authManager = new AuthManager();
             }
@@ -80,6 +80,6 @@ public class EchoPreLaunch implements PreLaunchEntrypoint {
             //? if debug
             //LOGGER.error("PreLaunch: Unexpected error while attempting login", t); 
         }
-        *///?}
+        //?}
     }
 }

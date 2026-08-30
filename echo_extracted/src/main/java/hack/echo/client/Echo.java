@@ -39,8 +39,8 @@ import net.minecraft.server.packs.resources.ResourceManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 //? if auth {
-/*import java.net.http.WebSocket;
- *///?}
+import java.net.http.WebSocket;
+ //?}
 
 //TODO: Auth dependency on rotation utils
 public class Echo implements ModInitializer, SimpleSynchronousResourceReloadListener {
@@ -68,7 +68,7 @@ public class Echo implements ModInitializer, SimpleSynchronousResourceReloadList
     @Override
     public void onInitialize() {
         //? if !auth {
-        commandManager = new CommandManager();
+        /*commandManager = new CommandManager();
         particleManager = new ParticleManager();
         chunkManager = new ChunkManager();
         blockEspManager = new BlockEspManager();
@@ -117,19 +117,19 @@ public class Echo implements ModInitializer, SimpleSynchronousResourceReloadList
 
         EventManager.register(this);
         ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(this);
-        //?}
+        *///?}
         //? if auth {
-/*		if (authManager == null) {
+		if (authManager == null) {
 			return;
 		}
 		authManager.requestPacket = 1;
 		Shaders.init();
         ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(this);
 		EventManager.register(this);
-		*///?}
+		//?}
     }
     //? if auth {
-/*
+
 	 private boolean authFingerprintMatchesInline(AuthManager manager) {
 	 int fp = manager.getAuthFingerprint();
 	 int tgt = manager.getAuthFingerprintTarget();
@@ -139,7 +139,7 @@ public class Echo implements ModInitializer, SimpleSynchronousResourceReloadList
 	 delta |= delta >> 5;
 	 return (delta & 0x01) == 0;
 	 }
-	 *///?}
+	 //?}
 
     @Override
     public void onResourceManagerReload(ResourceManager resourceManager) {

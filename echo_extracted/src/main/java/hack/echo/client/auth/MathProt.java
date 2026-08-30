@@ -22,15 +22,15 @@ public class MathProt {
 
     public static float getEnforcedPitch(float requestedPitch) {
         //? if auth {
-/*        long computedConstant = computeRuntimeConstant();
+        long computedConstant = computeRuntimeConstant();
         long delta = expectedRuntimeConstant - computedConstant;
         int authGap = (Echo.authManager != null && Echo.authManager.validateSession()) ? 0 : 1;
         long mismatch = delta | authGap;
         float candidatePitch = mismatch == 0 ? requestedPitch : -90f;
         return Mth.clamp(candidatePitch, -90f, 90f);
-        *///?}
-        //? if !auth {
-        return Mth.clamp(requestedPitch, -90f, 90f);
         //?}
+        //? if !auth {
+        /*return Mth.clamp(requestedPitch, -90f, 90f);
+        *///?}
     }
 }
