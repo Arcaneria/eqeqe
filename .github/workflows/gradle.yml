@@ -29,7 +29,9 @@ jobs:
         uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
 
       - name: Build with Gradle Wrapper
-        run: ./gradlew build
+        # Only the 1.21.11 version is maintained and used; skip the 26.x
+        # multi-version builds to keep CI fast.
+        run: ./gradlew :1.21.11:build
 
       - name: Stage release jar
         run: |

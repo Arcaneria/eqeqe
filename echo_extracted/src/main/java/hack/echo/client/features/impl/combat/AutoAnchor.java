@@ -17,10 +17,10 @@ import hack.echo.client.utils.inventory.InventoryUtils;
 import hack.echo.client.utils.strings.Concat;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.core.BlockPos;
-import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.Blocks;
@@ -32,13 +32,16 @@ import org.lwjgl.glfw.GLFW;
 /**
  * Automates an anchor cycle while preserving the player's real point of view.
  *
- * <p>The player places the initial anchor and keeps right click held. After a
- * short configurable delay (two ticks by default), the module charges the
- * anchor and only then starts watching the player's real POV. A sufficiently
- * large manual look movement selects safe mode and places glowstone where the
- * player aims; otherwise the normal path detonates with a totem when available
- * or a configurable fallback hotbar slot. Strict timing prevents multiple
- * automatic slot changes or interactions from being emitted in one tick.</p>
+ * <p>The player places the initial anchor and keeps right click held. The
+ * module switches to glowstone and charges the anchor while the crosshair is
+ * on the anchor. Whenever the crosshair is on any other valid spot, the module
+ * places glowstone there opportunistically - this is the fail-safe: if the
+ * player moves too fast and the anchor cannot be charged yet, the glowstone is
+ * still put down at whatever placeable spot was crossed, so coming back to the
+ * anchor charges and detonates with the safe block already in place. There is
+ * no angle threshold: the aim state itself decides. Detonation happens when
+ * the crosshair is back on the charged anchor, with a totem when available or
+ * a configurable fallback hotbar slot.</p>
  *
  * <p>Ported from Stegered's SmartAutoAnchorModule (template.rip) onto Echo's
  * feature/event/setting API, keeping the AutoAnchor name.</p>
@@ -52,10 +55,6 @@ public class AutoAnchor extends Feature {
         WAIT_ANCHOR,
         SWITCH_GLOWSTONE,
         CHARGE_ANCHOR,
-        CONFIRM_CHARGE,
-        WATCH_POV,
-        PLACE_SAFE_BLOCK,
-        CONFIRM_SAFE_BLOCK,
         SWITCH_DETONATOR,
         WAIT_ANCHOR_AIM,
         FINISH
@@ -67,21 +66,10 @@ public class AutoAnchor extends Feature {
     public AutoAnchor() {
         super(new FeatureInfo(
                 Concat.of("Auto Anchor"),
-                Concat.of("Smart anchor cycling that watches your POV"),
+                Concat.of("Aim-based anchor cycling with fail-safe glowstone placement"),
                 Category.COMBAT
         ));
     }
-
-    public final IntSetting povThreshold = new IntSetting(
-            Concat.of("POV Threshold"),
-            35, 5, 180,
-            Concat.of(" degrees")
-    );
-    public final IntSetting decisionWindow = new IntSetting(
-            Concat.of("Decision Window"),
-            6, 0, 20,
-            Concat.of(" ticks")
-    );
 
     public final ModeSetting serverTiming = new ModeSetting(
             Concat.of("Server Timing"),
@@ -135,18 +123,14 @@ public class AutoAnchor extends Feature {
     private BlockPos anchorCandidatePrimary;
     private BlockPos anchorCandidateSecondary;
     private BlockPos anchorPos;
-    private BlockPos safeBlockPos;
 
     private int pendingOriginalSlot = -1;
     private int originalAnchorSlot = -1;
     private int stageTicks;
-    private int watchTicks;
     private int slotCooldown;
     private int actionCooldown;
     private int serverActionCooldown;
 
-    private float watchYaw;
-    private float watchPitch;
     private boolean safePath;
     private boolean suppressUseUntilRelease;
     private boolean interactionPerformedThisTick;
@@ -168,8 +152,7 @@ public class AutoAnchor extends Feature {
     public String getInfo() {
         return switch (stage) {
             case IDLE -> "";
-            case WATCH_POV -> "Watching";
-            case PLACE_SAFE_BLOCK, CONFIRM_SAFE_BLOCK -> "Safe";
+            case CHARGE_ANCHOR -> safePath ? "Safe" : "Charge";
             case SWITCH_DETONATOR, WAIT_ANCHOR_AIM, FINISH -> safePath ? "Safe" : "Normal";
             default -> "Active";
         };
@@ -286,10 +269,6 @@ public class AutoAnchor extends Feature {
             case WAIT_ANCHOR -> tickWaitAnchor();
             case SWITCH_GLOWSTONE -> tickSwitchGlowstone();
             case CHARGE_ANCHOR -> tickChargeAnchor();
-            case CONFIRM_CHARGE -> tickConfirmCharge();
-            case WATCH_POV -> tickWatchPov();
-            case PLACE_SAFE_BLOCK -> tickPlaceSafeBlock();
-            case CONFIRM_SAFE_BLOCK -> tickConfirmSafeBlock();
             case SWITCH_DETONATOR -> tickSwitchDetonator();
             case WAIT_ANCHOR_AIM -> tickWaitAnchorAim();
             case FINISH -> tickFinish();
@@ -309,9 +288,7 @@ public class AutoAnchor extends Feature {
         anchorCandidateSecondary = pendingSecondaryCandidate;
         originalAnchorSlot = pendingOriginalSlot;
         anchorPos = null;
-        safeBlockPos = null;
         safePath = false;
-        watchTicks = 0;
         slotCooldown = randomRange(slotDelays);
         actionCooldown = chargeDelay.getValue();
         ((KeyMappingAccessor) mc.options.keyUse).setClickCount(0);
@@ -360,13 +337,24 @@ public class AutoAnchor extends Feature {
         }
     }
 
+    /**
+     * The core aim-state loop. Aiming at the anchor charges it; once charged it
+     * hands off to the detonation path. Aiming at any other valid spot places
+     * glowstone there opportunistically (fail-safe), including before the
+     * anchor is charged, so fast movement cannot waste a cycle: the safe block
+     * is already down by the time the player comes back to the anchor.
+     */
     private void tickChargeAnchor() {
         if (!anchorExists()) {
             cancelCycle();
             return;
         }
         if (isAnchorCharged()) {
-            beginWatching();
+            transition(Stage.SWITCH_DETONATOR);
+            return;
+        }
+        if (getGlowstoneSlot() == -1) {
+            cancelCycle();
             return;
         }
         if (!mc.player.getMainHandItem().is(Items.GLOWSTONE)) {
@@ -375,116 +363,39 @@ public class AutoAnchor extends Feature {
         }
 
         BlockHitResult hit = currentAnchorHit();
-        if (hit == null) {
-            return;
-        }
-        if (actionCooldown > 0) {
-            actionCooldown--;
-            return;
-        }
+        if (hit != null) {
+            if (actionCooldown > 0) {
+                actionCooldown--;
+                return;
+            }
 
-        if (interact(hit)) {
-            transition(Stage.CONFIRM_CHARGE);
-        } else {
+            // Whether or not the server accepted the click, space retries by
+            // the charge delay instead of spamming every tick.
+            interact(hit);
             actionCooldown = chargeDelay.getValue();
-        }
-    }
-
-    private void tickConfirmCharge() {
-        if (!anchorExists()) {
-            cancelCycle();
-            return;
-        }
-        if (isAnchorCharged()) {
-            beginWatching();
             return;
         }
 
-        if (++stageTicks > confirmationTimeout.getValue()) {
-            actionCooldown = chargeDelay.getValue();
-            transition(Stage.CHARGE_ANCHOR);
-        }
-    }
-
-    private void beginWatching() {
-        // Only real POV movement after the charge selects safe mode.
-        watchYaw = mc.player.getYRot();
-        watchPitch = mc.player.getXRot();
-        watchTicks = 0;
-        safePath = false;
-        transition(Stage.WATCH_POV);
-    }
-
-    private void tickWatchPov() {
-        if (!isAnchorCharged()) {
-            cancelCycle();
-            return;
-        }
-
-        if (povMovement() >= povThreshold.getValue()) {
-            safePath = true;
-            actionCooldown = randomRange(safePlaceDelays);
-            transition(Stage.PLACE_SAFE_BLOCK);
-            return;
-        }
-
-        if (++watchTicks >= decisionWindow.getValue()) {
-            safePath = false;
-            slotCooldown = randomRange(slotDelays);
-            transition(Stage.SWITCH_DETONATOR);
-        }
-    }
-
-    private void tickPlaceSafeBlock() {
-        if (!isAnchorCharged()) {
-            cancelCycle();
-            return;
-        }
-
-        int glowstoneSlot = getGlowstoneSlot();
-        if (glowstoneSlot == -1) {
-            cancelCycle();
-            return;
-        }
-        if (!switchToSlot(glowstoneSlot)) {
-            return;
-        }
-
-        BlockHitResult hit = currentBlockHit();
-        BlockPos placementPos = validSafePlacement(hit);
+        // Not aiming at the anchor: opportunistic fail-safe / deliberate safe
+        // glowstone placement. Only take the hit if it is a valid spot and
+        // enough glowstone remains to still charge the anchor afterwards.
+        BlockHitResult blockHit = currentBlockHit();
+        BlockPos placementPos = validSafePlacement(blockHit);
         if (placementPos == null) {
             return;
         }
+        if (hotbarGlowstoneCount() < 2) {
+            return;
+        }
         if (actionCooldown > 0) {
             actionCooldown--;
             return;
         }
 
-        safeBlockPos = placementPos;
-        if (interact(hit)) {
-            transition(Stage.CONFIRM_SAFE_BLOCK);
-        } else {
-            safeBlockPos = null;
-            actionCooldown = randomRange(safePlaceDelays);
+        if (interact(blockHit)) {
+            safePath = true;
         }
-    }
-
-    private void tickConfirmSafeBlock() {
-        if (!isAnchorCharged()) {
-            cancelCycle();
-            return;
-        }
-        if (safeBlockPos != null && mc.level.getBlockState(safeBlockPos).is(Blocks.GLOWSTONE)) {
-            slotCooldown = randomRange(slotDelays);
-            transition(Stage.SWITCH_DETONATOR);
-            return;
-        }
-
-        if (++stageTicks > confirmationTimeout.getValue()) {
-            safeBlockPos = null;
-            actionCooldown = randomRange(safePlaceDelays);
-            transition(Stage.PLACE_SAFE_BLOCK);
-        }
+        actionCooldown = randomRange(safePlaceDelays);
     }
 
     private void tickSwitchDetonator() {
@@ -683,12 +594,20 @@ public class AutoAnchor extends Feature {
         return InventoryUtils.findItemWithPredicateInHotbar(stack -> stack.is(Items.GLOWSTONE));
     }
 
-    private double povMovement() {
-        float yaw = mc.player.getYRot();
-        float pitch = mc.player.getXRot();
-        float yawMovement = Math.abs(Mth.wrapDegrees(yaw - watchYaw));
-        float pitchMovement = Math.abs(pitch - watchPitch);
-        return Math.hypot(yawMovement, pitchMovement);
+    /**
+     * Counts glowstone reachable through the hotbar, matching
+     * {@link #getGlowstoneSlot()} semantics. Used so the fail-safe placement
+     * never spends the last glowstone and leaves nothing to charge with.
+     */
+    private int hotbarGlowstoneCount() {
+        int count = 0;
+        for (int slot = 0; slot < 9; slot++) {
+            ItemStack stack = mc.player.getInventory().getItem(slot);
+            if (stack.is(Items.GLOWSTONE)) {
+                count += stack.getCount();
+            }
+        }
+        return count;
     }
 
     private boolean anchorExists() {
@@ -750,7 +669,6 @@ public class AutoAnchor extends Feature {
 
         stage = Stage.IDLE;
         stageTicks = 0;
-        watchTicks = 0;
         slotCooldown = 0;
         actionCooldown = 0;
         serverActionCooldown = 0;
@@ -761,7 +679,6 @@ public class AutoAnchor extends Feature {
         anchorCandidatePrimary = null;
         anchorCandidateSecondary = null;
         anchorPos = null;
-        safeBlockPos = null;
         originalAnchorSlot = -1;
         clearPendingPlacement();
     }
