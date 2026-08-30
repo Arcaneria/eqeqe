@@ -158,7 +158,7 @@ public class TotemDoubleHandModule extends Feature {
 
     @EventSubscribe
     private void onScreen(EventSetScreen event) {
-        if (event.getScreen() instanceof InventoryScreen && mc.screen == null && switchOnOpenInv.getValue()) {
+        if (event.getScreen() instanceof InventoryScreen && hack.echo.client.api.MinecraftCompat.getScreen() == null && switchOnOpenInv.getValue()) {
             InventoryUtils.setInvSlot(slotToSwitch.getValue() - 1);
         }
     }
@@ -214,7 +214,7 @@ public class TotemDoubleHandModule extends Feature {
         if (isNull()) return;
         pruneAttackedPlayers();
 
-        if (mc.screen != null) return;
+        if (hack.echo.client.api.MinecraftCompat.getScreen() != null) return;
 
         if ((notWhileShielding.getValue() && mc.player.getUseItem().is(Items.SHIELD)) || cooldownClock > System.currentTimeMillis()) {
             return;

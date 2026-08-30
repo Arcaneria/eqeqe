@@ -187,7 +187,7 @@ public class AutoAnchor extends Feature {
                 || event.getHand() != InteractionHand.MAIN_HAND
                 || !isUseHeld()
                 || isNull()
-                || mc.screen != null
+                || hack.echo.client.api.MinecraftCompat.getScreen() != null
                 || !mc.player.getMainHandItem().is(Items.RESPAWN_ANCHOR)) {
             return;
         }
@@ -262,7 +262,7 @@ public class AutoAnchor extends Feature {
             return;
         }
 
-        if (isNull() || mc.screen != null || !isUseHeld()) {
+        if (isNull() || hack.echo.client.api.MinecraftCompat.getScreen() != null || !isUseHeld()) {
             resetCycle(true, false);
             return;
         }
